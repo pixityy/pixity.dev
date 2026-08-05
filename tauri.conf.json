@@ -45,6 +45,9 @@
       "minimumSystemVersion": "13.0",
       "entitlements": "entitlements.plist"
     },
+    "iOS": {
+      "minimumSystemVersion": "14.0"
+    },
     "linux": {
       "deb": {
         "depends": ["libwebkit2gtk-4.1-0", "libpipewire-0.3-0"]

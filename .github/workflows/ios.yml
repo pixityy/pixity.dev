@@ -1,0 +1,87 @@
+name: ios
+
+# Builds an UNSIGNED .ipa for sideloading.
+#
+# Unsigned on purpose. `tauri ios build` has no no-sign option and wants a
+# signing identity and a team, which would mean an Apple account and
+# certificates in secrets. Sideload tools (AltStore, SideStore, Sideloadly)
+# re-sign the payload themselves, so a signed artifact from CI would only be
+# thrown away. That is why this drops to xcodebuild instead of the Tauri CLI for
+# the archive step.
+#
+# Manual for now: nothing here has ever run, and the generated Xcode project's
+# names are discovered rather than assumed. Once a run succeeds, fold it into
+# build.yml so it ships with the other installers.
+on:
+  workflow_dispatch:
+
+jobs:
+  ipa:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: tauri cli
+        run: cargo install tauri-cli --version "^2" --locked
+
+      - name: icons
+        run: cargo tauri icon icon-source.png --ios-color '#c8901f'
+
+      # Generates gen/apple/. --ci keeps it from prompting.
+      - name: scaffold xcode project
+        run: cargo tauri ios init --ci
+
+      # The scheme and project names depend on how Tauri derives them from the
+      # crate, so read them rather than guess. This step is also the log to look
+      # at when something below cannot find a path.
+      - name: discover project
+        id: xc
+        run: |
+          set -eux
+          ls -la gen/apple
+          proj=$(find gen/apple -maxdepth 1 -name '*.xcodeproj' | head -1)
+          echo "proj=$proj" >> "$GITHUB_OUTPUT"
+          xcodebuild -project "$proj" -list
+          scheme=$(xcodebuild -project "$proj" -list -json \
+            | python3 -c 'import json,sys; s=json.load(sys.stdin)["project"]["schemes"]; print(next((x for x in s if "iOS" in x), s[0]))')
+          echo "scheme=$scheme" >> "$GITHUB_OUTPUT"
+
+      - name: archive (unsigned)
+        run: |
+          set -eux
+          xcodebuild archive \
+            -project "${{ steps.xc.outputs.proj }}" \
+            -scheme "${{ steps.xc.outputs.scheme }}" \
+            -configuration release \
+            -sdk iphoneos \
+            -archivePath "$PWD/build/pixity.xcarchive" \
+            -destination 'generic/platform=iOS' \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGN_ENTITLEMENTS="" \
+            DEVELOPMENT_TEAM=""
+
+      # An .ipa is a zip with the .app inside a top-level Payload/ directory and
+      # nothing else. Signing is the only thing this is missing.
+      - name: package ipa
+        run: |
+          set -eux
+          app=$(find build/pixity.xcarchive/Products/Applications -maxdepth 1 -name '*.app' | head -1)
+          test -n "$app"
+          rm -rf Payload && mkdir Payload
+          cp -R "$app" Payload/
+          zip -qry pixity-unsigned.ipa Payload
+          ls -lh pixity-unsigned.ipa
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ios-unsigned-ipa
+          path: pixity-unsigned.ipa
+          if-no-files-found: error
