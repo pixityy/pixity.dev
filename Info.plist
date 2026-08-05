@@ -6,6 +6,9 @@
   <key>NSMicrophoneUsageDescription</key>
   <string>pixity needs the microphone so you can talk in voice calls.</string>
 
+  <key>NSScreenCaptureUsageDescription</key>
+  <string>pixity needs to record the screen so you can share it in a call.</string>
+
   <key>NSHumanReadableCopyright</key>
   <string>GPL-3.0</string>
 
