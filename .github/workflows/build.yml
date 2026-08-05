@@ -1,0 +1,123 @@
+name: build
+
+# Reusable: builds installers on all three platforms, then publishes one release
+# from a single job. The publish is deliberately not done per-runner -- three
+# runners racing to create the same tag is how you get a half-populated release.
+on:
+  workflow_call:
+    inputs:
+      tag:
+        required: true
+        type: string
+      title:
+        required: true
+        type: string
+      prerelease:
+        required: false
+        type: boolean
+        default: false
+      rolling:
+        description: replace an existing release on this tag instead of failing
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            name: linux
+          - os: windows-latest
+            name: windows
+          # One universal binary rather than separate Intel and Apple Silicon
+          # runners: half the CI time and one file for people to download.
+          - os: macos-latest
+            name: macos
+            target: universal-apple-darwin
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target == 'universal-apple-darwin' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: system dependencies
+        if: matrix.os == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev build-essential curl wget file \
+            libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev \
+            patchelf rpm
+
+      - name: tauri cli
+        run: cargo install tauri-cli --version "^2" --locked
+
+      # icons/ is generated, not committed. The bundler fails on the first
+      # missing icon, so this is not optional.
+      - name: icons
+        run: cargo tauri icon icon-source.png
+
+      - name: build
+        run: cargo tauri build ${{ matrix.target && format('--target {0}', matrix.target) || '' }}
+
+      # Globbed rather than listed per platform: a universal macOS build puts
+      # its bundle under target/universal-apple-darwin/release/, everything else
+      # under target/release/, and hard-coding both is a path to get wrong once.
+      - name: collect
+        shell: bash
+        run: |
+          mkdir -p out
+          find target -path '*/bundle/*' -type f \
+            \( -name '*.deb' -o -name '*.rpm' -o -name '*.AppImage' \
+               -o -name '*.dmg' -o -name '*.msi' -o -name '*.exe' \) \
+            -exec cp {} out/ \;
+          ls -lh out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: out/*
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - run: ls -lh dist
+
+      # A rolling tag (nightly) has to be taken down first: the release action
+      # will not move a tag that already points somewhere else.
+      - name: clear previous
+        if: inputs.rolling
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh release delete "${{ inputs.tag }}" --cleanup-tag --yes || true
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag }}
+          name: ${{ inputs.title }}
+          prerelease: ${{ inputs.prerelease }}
+          files: dist/*
+          fail_on_unmatched_files: true
+          body: |
+            Built from ${{ github.sha }}.
+
+            Unsigned. macOS will refuse to open the app until you clear it with
+            `xattr -dr com.apple.quarantine /Applications/pixity.app`, and
+            Windows SmartScreen will warn on first run.

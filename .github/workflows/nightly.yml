@@ -1,0 +1,25 @@
+name: nightly
+
+on:
+  schedule:
+    # 04:00 UTC. Cron here is best effort -- GitHub delays scheduled runs under
+    # load, sometimes by a lot, so treat this as "most days" rather than a clock.
+    - cron: '0 4 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: nightly
+  cancel-in-progress: true
+
+jobs:
+  call:
+    uses: ./.github/workflows/build.yml
+    permissions:
+      contents: write
+    with:
+      tag: nightly
+      title: nightly
+      prerelease: true
+      # One rolling release rather than one per night, so the download link
+      # keeps working and the releases page does not fill up with them.
+      rolling: true

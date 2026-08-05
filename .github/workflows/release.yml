@@ -1,0 +1,36 @@
+name: release
+
+# Every push to main becomes a release. run_number is what keeps the tags
+# unique and ordered: the version in Cargo.toml does not move on every commit,
+# so tagging by version alone would collide on the second push.
+on:
+  push:
+    branches: [main]
+    # Skips the ~10 minutes of CI for a README change. Take this out if you
+    # would rather every commit produce a build no matter what it touched.
+    paths:
+      - 'src/**'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'build.rs'
+      - 'tauri.conf.json'
+      - 'capabilities/**'
+      - 'permissions/**'
+      - '*.plist'
+      - 'icon-source.png'
+      - '.github/workflows/**'
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  call:
+    uses: ./.github/workflows/build.yml
+    permissions:
+      contents: write
+    with:
+      tag: build-${{ github.run_number }}
+      title: build ${{ github.run_number }}
+      prerelease: false

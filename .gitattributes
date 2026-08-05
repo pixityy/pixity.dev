@@ -1,0 +1,6 @@
+# The workflows carry `run: |` blocks that bash executes on a Linux runner, and
+# a CRLF in one of those fails as `$'\r': command not found`. This repo is
+# generated on Windows, so without this the checkout is committed with CRLF and
+# CI breaks in a way that looks nothing like a line-ending problem.
+* text=auto eol=lf
+*.png binary
