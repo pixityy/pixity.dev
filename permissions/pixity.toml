@@ -1,0 +1,13 @@
+[[permission]]
+identifier = "allow-pixity-bridge"
+description = "The native bridges pixity.dev calls: notifications, the unread badge, and screen capture."
+commands.allow = [
+  "native_info",
+  "notify_show",
+  "notify_close",
+  "badge_set",
+  "share_probe",
+  "share_start",
+  "share_stop",
+  "share_signal_in",
+]
