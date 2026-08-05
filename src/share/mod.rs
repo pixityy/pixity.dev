@@ -4,11 +4,13 @@ use serde::{Deserialize, Serialize};
 use tauri::AppHandle;
 
 mod capture;
+#[cfg(target_os = "macos")]
 mod encode;
+#[cfg(target_os = "macos")]
 mod peer;
 
 pub const fn supported() -> bool {
-    cfg!(any(target_os = "macos", target_os = "linux"))
+    cfg!(target_os = "macos")
 }
 
 #[derive(Serialize)]
@@ -73,9 +75,10 @@ pub struct Signal {
     pub payload: serde_json::Value,
 }
 
+#[cfg(target_os = "macos")]
 pub const SIGNAL_EVENT: &str = "pixity://share-signal";
 
-#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[cfg(target_os = "macos")]
 mod running {
     use super::*;
     use std::sync::Mutex;
@@ -88,12 +91,9 @@ mod running {
     pub static CURRENT: Mutex<Option<Running>> = Mutex::new(None);
 }
 
-#[cfg(any(target_os = "macos", target_os = "linux"))]
 pub fn init(_app: &AppHandle) {}
 
-#[cfg(not(any(target_os = "macos", target_os = "linux")))]
-pub fn init(_app: &AppHandle) {}
-
+#[cfg(target_os = "macos")]
 fn preset(name: &str) -> (u32, u32, u32, u32) {
     match name {
         "crisp" => (1920, 1080, 30, 5_000_000),
@@ -102,10 +102,12 @@ fn preset(name: &str) -> (u32, u32, u32, u32) {
     }
 }
 
+#[cfg(target_os = "macos")]
 const TOTAL_BITRATE: u32 = 4_000_000;
+#[cfg(target_os = "macos")]
 const MIN_BITRATE: u32 = 300_000;
 
-#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[cfg(target_os = "macos")]
 pub async fn start(app: &AppHandle, args: StartArgs) -> Result<(), String> {
     use std::sync::Arc;
     use tauri::Emitter;
@@ -153,12 +155,12 @@ pub async fn start(app: &AppHandle, args: StartArgs) -> Result<(), String> {
     Ok(())
 }
 
-#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+#[cfg(not(target_os = "macos"))]
 pub async fn start(_app: &AppHandle, _args: StartArgs) -> Result<(), String> {
     Err("this build has no native capture".into())
 }
 
-#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[cfg(target_os = "macos")]
 pub async fn stop(_app: &AppHandle) {
     let prev = running::CURRENT.lock().unwrap().take();
     if let Some(r) = prev {
@@ -167,10 +169,10 @@ pub async fn stop(_app: &AppHandle) {
     }
 }
 
-#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+#[cfg(not(target_os = "macos"))]
 pub async fn stop(_app: &AppHandle) {}
 
-#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[cfg(target_os = "macos")]
 pub async fn signal_in(_app: &AppHandle, sig: Signal) -> Result<(), String> {
     let peers = {
         let cur = running::CURRENT.lock().unwrap();
@@ -183,12 +185,12 @@ pub async fn signal_in(_app: &AppHandle, sig: Signal) -> Result<(), String> {
     peers.signal(sig).await
 }
 
-#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+#[cfg(not(target_os = "macos"))]
 pub async fn signal_in(_app: &AppHandle, _sig: Signal) -> Result<(), String> {
     Err("this build has no native capture".into())
 }
 
-#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[cfg(target_os = "macos")]
 struct Feed {
     peers: std::sync::Arc<peer::Peers>,
 
@@ -199,7 +201,7 @@ struct Feed {
     want_audio: bool,
 }
 
-#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[cfg(target_os = "macos")]
 impl capture::Sink for Feed {
     fn video(&self, planes: capture::Planes<'_>) {
         let Ok(mut slot) = self.video.lock() else { return };
